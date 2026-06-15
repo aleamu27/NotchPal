@@ -32,25 +32,30 @@ class SpotifyAPI: ObservableObject {
         let artworkURL: String?
         let durationMs: Int
         var progressMs: Int
-
+        
         static func from(json: [String: Any], progressMs: Int) -> SpotifyTrack? {
-            guard let id = json["id"] as? String,
-                  let name = json["name"] as? String,
-                  let durationMs = json["duration_ms"] as? Int,
-                  let album = json["album"] as? [String: Any],
-                  let albumName = album["name"] as? String,
-                  let artists = json["artists"] as? [[String: Any]],
-                  let artistName = artists.first?["name"] as? String else {
-                return nil
-            }
-
+           
+            
+            
+            // Bruk fallback-verdier (default) for resten, i stedet for å krasje appen
+            let id = json["id"] as? String ?? ""
+            let name = json["name"] as? String ?? "Ukjent låt" // <-- Legg til denne
+            let durationMs = json["duration_ms"] as? Int ?? 0
+            
+            let album = json["album"] as? [String: Any]
+            let albumName = album?["name"] as? String ?? "Ukjent album"
+            
+            let artists = json["artists"] as? [[String: Any]]
+            let artistName = artists?.first?["name"] as? String ?? "Ukjent artist"
+            
             var artworkURL: String?
-            if let images = album["images"] as? [[String: Any]],
+            if let album = album,
+               let images = album["images"] as? [[String: Any]],
                let image = images.first(where: { ($0["height"] as? Int ?? 0) >= 200 }) ?? images.first,
                let url = image["url"] as? String {
                 artworkURL = url
             }
-
+            
             return SpotifyTrack(
                 id: id,
                 name: name,
@@ -60,8 +65,7 @@ class SpotifyAPI: ObservableObject {
                 durationMs: durationMs,
                 progressMs: progressMs
             )
-        }
-    }
+        }}
 
     private var authCheckTimer: Timer?
 
@@ -257,11 +261,92 @@ class SpotifyAPI: ObservableObject {
             }
         }.resume()
     }
-
+    private func fetchRecentlyPlayed(token: String) {
+        guard let url = URL(string: "\(baseURL)/me/player/recently-played?limit=1") else { return }
+        
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            guard let self = self else { return }
+            
+            if let error = error {
+                print("❌ Nettverksfeil i nylig spilt: \(error.localizedDescription)")
+                return
+            }
+            
+            guard let httpResponse = response as? HTTPURLResponse else { return }
+            
+            // Sjekker om tokenet faktisk har utløpt
+            if httpResponse.statusCode == 401 {
+                print("🔑 [SpotifyAPI] Token utgått under recently-played. Fornyer...")
+                SpotifyAuth.shared.refreshAccessToken()
+                return
+            }
+            
+            // Håndterer 429 Rate Limit og henter ut nøyaktig karantenetid
+            if httpResponse.statusCode == 429 {
+                let retryAfter = httpResponse.value(forHTTPHeaderField: "Retry-After") ?? "Ukjent"
+                print("⚠️ [SpotifyAPI] Rate limited! Serveren sier vi må vente i \(retryAfter) sekunder.")
+                
+                DispatchQueue.main.async {
+                    self.stopPolling()
+                    self.pollTimer?.invalidate()
+                    self.pollTimer = nil
+                    
+                    let waitTime = Double(retryAfter) ?? 45.0
+                    
+                    DispatchQueue.main.asyncAfter(deadline: .now() + waitTime) {
+                        print("🔄 [SpotifyAPI] Karantene over (\(waitTime)s). Prøver å starte polling igjen...")
+                        self.startPolling()
+                    }
+                }
+                return
+            }
+            
+            if httpResponse.statusCode == 204 {
+                return
+            }
+            
+            guard let data = data, !data.isEmpty else { return }
+            
+            do {
+                guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                      let items = json["items"] as? [[String: Any]],
+                      let firstItem = items.first,
+                      let trackJson = firstItem["track"] as? [String: Any] else {
+                    return
+                }
+                
+                if let track = SpotifyTrack.from(json: trackJson, progressMs: 0) {
+                    DispatchQueue.main.async {
+                        self.lastPlayedTrack = track
+                        self.saveLastPlayedTrack(track)
+                        if let artworkURL = track.artworkURL {
+                            self.fetchArtwork(from: artworkURL)
+                        }
+                    }
+                }
+            } catch {
+                // Ignorerer parsefeil under rate-limiting
+            }
+        }.resume()
+    }
     private func parseTrackData(_ data: Data) {
+        // 1. Tving Xcode til å printe ut nøyaktig hva Spotify svarer!
+        if let jsonString = String(data: data, encoding: .utf8) {
+            print("🎵 [Spotify API Svar]: \(jsonString)")
+        }
+
         do {
-            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let item = json["item"] as? [String: Any] else {
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                print("❌ Kunne ikke konvertere data til JSON-dictionary")
+                return
+            }
+            
+            // Sjekk om 'item' i det hele tatt eksisterer (Spotify returnerer null her hvis ingenting er aktivt)
+            guard let item = json["item"] as? [String: Any] else {
+                print("⚠️ 'item' mangler i JSON. Er Spotify satt på pause på en annen enhet?")
                 return
             }
 
@@ -269,6 +354,7 @@ class SpotifyAPI: ObservableObject {
             let progressMs = json["progress_ms"] as? Int ?? 0
 
             guard let track = SpotifyTrack.from(json: item, progressMs: progressMs) else {
+                print("❌ SpotifyTrack.from returnerte nil! Noe feilet under parsing av: \(item)")
                 return
             }
 
@@ -277,7 +363,6 @@ class SpotifyAPI: ObservableObject {
             currentTrack = track
             isPlaying = playing
 
-            // Save as last played
             saveLastPlayedTrack(track)
 
             if trackChanged, let artworkURL = track.artworkURL {
@@ -285,48 +370,8 @@ class SpotifyAPI: ObservableObject {
             }
 
         } catch {
-            print("❌ Parse error: \(error)")
+            print("❌ JSON Parse error: \(error)")
         }
-    }
-
-    private func fetchRecentlyPlayed(token: String) {
-        guard let url = URL(string: "\(baseURL)/me/player/recently-played?limit=1") else { return }
-
-        var request = URLRequest(url: url)
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-
-        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
-            guard let data = data,
-                  let httpResponse = response as? HTTPURLResponse,
-                  httpResponse.statusCode == 200 else {
-                DispatchQueue.main.async {
-                    self?.connectionState = .noActiveDevice
-                }
-                return
-            }
-
-            do {
-                if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                   let items = json["items"] as? [[String: Any]],
-                   let firstItem = items.first,
-                   let trackData = firstItem["track"] as? [String: Any],
-                   let track = SpotifyTrack.from(json: trackData, progressMs: 0) {
-
-                    DispatchQueue.main.async {
-                        self?.lastPlayedTrack = track
-                        self?.connectionState = .noActiveDevice
-                        self?.saveLastPlayedTrack(track)
-
-                        // Fetch artwork if needed
-                        if let artworkURL = track.artworkURL, self?.artwork == nil {
-                            self?.fetchArtwork(from: artworkURL)
-                        }
-                    }
-                }
-            } catch {
-                print("❌ Recently played parse error: \(error)")
-            }
-        }.resume()
     }
 
     private func fetchArtwork(from urlString: String) {
