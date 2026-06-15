@@ -1,0 +1,46 @@
+{
+  "" : {
+    "const-values" : "/Users/alexanderamundsen/Documents/notch_pal/NotchPal/build/DerivedData/Build/Intermediates.noindex/NotchPal.build/Release/NotchPal.build/Objects-normal/arm64/NotchPal-primary.swiftconstvalues",
+    "dependencies" : "/Users/alexanderamundsen/Documents/notch_pal/NotchPal/build/DerivedData/Build/Intermediates.noindex/NotchPal.build/Release/NotchPal.build/Objects-normal/arm64/NotchPal-primary.d",
+    "diagnostics" : "/Users/alexanderamundsen/Documents/notch_pal/NotchPal/build/DerivedData/Build/Intermediates.noindex/NotchPal.build/Release/NotchPal.build/Objects-normal/arm64/NotchPal-primary.dia",
+    "emit-module-dependencies" : "/Users/alexanderamundsen/Documents/notch_pal/NotchPal/build/DerivedData/Build/Intermediates.noindex/NotchPal.build/Release/NotchPal.build/Objects-normal/arm64/NotchPal-primary-emit-module.d",
+    "emit-module-diagnostics" : "/Users/alexanderamundsen/Documents/notch_pal/NotchPal/build/DerivedData/Build/Intermediates.noindex/NotchPal.build/Release/NotchPal.build/Objects-normal/arm64/NotchPal-primary-emit-module.dia",
+    "pch" : "/Users/alexanderamundsen/Documents/notch_pal/NotchPal/build/DerivedData/Build/Intermediates.noindex/NotchPal.build/Release/NotchPal.build/Objects-normal/arm64/NotchPal-primary-Bridging-header.pch",
+    "swift-dependencies" : "/Users/alexanderamundsen/Documents/notch_pal/NotchPal/build/DerivedData/Build/Intermediates.noindex/NotchPal.build/Release/NotchPal.build/Objects-normal/arm64/NotchPal-primary.swiftdeps"
+  },
+  "/Users/alexanderamundsen/Documents/notch_pal/NotchPal/NotchPal/CalendarManager.swift" : {
+    "index-unit-output-path" : "/NotchPal.build/Release/NotchPal.build/Objects-normal/arm64/CalendarManager.o",
+    "llvm-bc" : "/Users/alexanderamundsen/Documents/notch_pal/NotchPal/build/DerivedData/Build/Intermediates.noindex/NotchPal.build/Release/NotchPal.build/Objects-normal/arm64/CalendarManager.bc",
+    "object" : "/Users/alexanderamundsen/Documents/notch_pal/NotchPal/build/DerivedData/Build/Intermediates.noindex/NotchPal.build/Release/NotchPal.build/Objects-normal/arm64/CalendarManager.o"
+  },
+  "/Users/alexanderamundsen/Documents/notch_pal/NotchPal/NotchPal/NotchPalApp.swift" : {
+    "index-unit-output-path" : "/NotchPal.build/Release/NotchPal.build/Objects-normal/arm64/NotchPalApp.o",
+    "llvm-bc" : "/Users/alexanderamundsen/Documents/notch_pal/NotchPal/build/DerivedData/Build/Intermediates.noindex/NotchPal.build/Release/NotchPal.build/Objects-normal/arm64/NotchPalApp.bc",
+    "object" : "/Users/alexanderamundsen/Documents/notch_pal/NotchPal/build/DerivedData/Build/Intermediates.noindex/NotchPal.build/Release/NotchPal.build/Objects-normal/arm64/NotchPalApp.o"
+  },
+  "/Users/alexanderamundsen/Documents/notch_pal/NotchPal/NotchPal/NotchView.swift" : {
+    "index-unit-output-path" : "/NotchPal.build/Release/NotchPal.build/Objects-normal/arm64/NotchView.o",
+    "llvm-bc" : "/Users/alexanderamundsen/Documents/notch_pal/NotchPal/build/DerivedData/Build/Intermediates.noindex/NotchPal.build/Release/NotchPal.build/Objects-normal/arm64/NotchView.bc",
+    "object" : "/Users/alexanderamundsen/Documents/notch_pal/NotchPal/build/DerivedData/Build/Intermediates.noindex/NotchPal.build/Release/NotchPal.build/Objects-normal/arm64/NotchView.o"
+  },
+  "/Users/alexanderamundsen/Documents/notch_pal/NotchPal/NotchPal/SpotifyAPI.swift" : {
+    "index-unit-output-path" : "/NotchPal.build/Release/NotchPal.build/Objects-normal/arm64/SpotifyAPI.o",
+    "llvm-bc" : "/Users/alexanderamundsen/Documents/notch_pal/NotchPal/build/DerivedData/Build/Intermediates.noindex/NotchPal.build/Release/NotchPal.build/Objects-normal/arm64/SpotifyAPI.bc",
+    "object" : "/Users/alexanderamundsen/Documents/notch_pal/NotchPal/build/DerivedData/Build/Intermediates.noindex/NotchPal.build/Release/NotchPal.build/Objects-normal/arm64/SpotifyAPI.o"
+  },
+  "/Users/alexanderamundsen/Documents/notch_pal/NotchPal/NotchPal/SpotifyAuth.swift" : {
+    "index-unit-output-path" : "/NotchPal.build/Release/NotchPal.build/Objects-normal/arm64/SpotifyAuth.o",
+    "llvm-bc" : "/Users/alexanderamundsen/Documents/notch_pal/NotchPal/build/DerivedData/Build/Intermediates.noindex/NotchPal.build/Release/NotchPal.build/Objects-normal/arm64/SpotifyAuth.bc",
+    "object" : "/Users/alexanderamundsen/Documents/notch_pal/NotchPal/build/DerivedData/Build/Intermediates.noindex/NotchPal.build/Release/NotchPal.build/Objects-normal/arm64/SpotifyAuth.o"
+  },
+  "/Users/alexanderamundsen/Documents/notch_pal/NotchPal/NotchPal/SpotifyWebPlayer.swift" : {
+    "index-unit-output-path" : "/NotchPal.build/Release/NotchPal.build/Objects-normal/arm64/SpotifyWebPlayer.o",
+    "llvm-bc" : "/Users/alexanderamundsen/Documents/notch_pal/NotchPal/build/DerivedData/Build/Intermediates.noindex/NotchPal.build/Release/NotchPal.build/Objects-normal/arm64/SpotifyWebPlayer.bc",
+    "object" : "/Users/alexanderamundsen/Documents/notch_pal/NotchPal/build/DerivedData/Build/Intermediates.noindex/NotchPal.build/Release/NotchPal.build/Objects-normal/arm64/SpotifyWebPlayer.o"
+  },
+  "/Users/alexanderamundsen/Documents/notch_pal/NotchPal/build/DerivedData/Build/Intermediates.noindex/NotchPal.build/Release/NotchPal.build/DerivedSources/GeneratedAssetSymbols.swift" : {
+    "index-unit-output-path" : "/NotchPal.build/Release/NotchPal.build/Objects-normal/arm64/GeneratedAssetSymbols.o",
+    "llvm-bc" : "/Users/alexanderamundsen/Documents/notch_pal/NotchPal/build/DerivedData/Build/Intermediates.noindex/NotchPal.build/Release/NotchPal.build/Objects-normal/arm64/GeneratedAssetSymbols.bc",
+    "object" : "/Users/alexanderamundsen/Documents/notch_pal/NotchPal/build/DerivedData/Build/Intermediates.noindex/NotchPal.build/Release/NotchPal.build/Objects-normal/arm64/GeneratedAssetSymbols.o"
+  }
+}

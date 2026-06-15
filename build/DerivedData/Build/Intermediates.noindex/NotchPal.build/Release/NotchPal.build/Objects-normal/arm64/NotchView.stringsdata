@@ -1,0 +1,184 @@
+{
+  "source": "/Users/alexanderamundsen/Documents/notch_pal/NotchPal/NotchPal/NotchView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Koble til Spotify",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 162
+        }
+      },
+      {
+        "comment": "",
+        "key": "Logg inn for å se musikken din",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 166
+        }
+      },
+      {
+        "comment": "",
+        "key": "Koble til",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 178
+        }
+      },
+      {
+        "comment": "",
+        "key": "Kobler til Spotify...",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 196
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 423
+        }
+      },
+      {
+        "comment": "",
+        "key": "Add Shortcut",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 701
+        }
+      },
+      {
+        "comment": "",
+        "key": "URL (e.g., https://google.com)",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 704
+        }
+      },
+      {
+        "comment": "",
+        "key": "Cancel",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 709
+        }
+      },
+      {
+        "comment": "",
+        "key": "Add",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 714
+        }
+      },
+      {
+        "comment": "",
+        "key": "(%lld/%lld)",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 874
+        }
+      },
+      {
+        "comment": "",
+        "key": "Break",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 871
+        }
+      },
+      {
+        "comment": "",
+        "key": "Focus",
+        "location": {
+          "startingColumn": 48,
+          "startingLine": 871
+        }
+      },
+      {
+        "comment": "",
+        "key": "Starting camera...",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 1101
+        }
+      },
+      {
+        "comment": "",
+        "key": "Camera access needed",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 1116
+        }
+      },
+      {
+        "comment": "",
+        "key": "Allow",
+        "location": {
+          "startingColumn": 36,
+          "startingLine": 1119
+        }
+      },
+      {
+        "comment": "",
+        "key": "Camera denied",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 1136
+        }
+      },
+      {
+        "comment": "",
+        "key": "Enable in System Settings",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 1139
+        }
+      },
+      {
+        "comment": "",
+        "key": "Mirror",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 1185
+        }
+      },
+      {
+        "comment": "",
+        "key": "Lader",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 1411
+        }
+      },
+      {
+        "comment": "",
+        "key": "Batteri",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 1402
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld%%",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 1405
+        }
+      },
+      {
+        "comment": "",
+        "key": "Oppetid",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 1430
+        }
+      }
+    ]
+  },
+  "version": 1
+}

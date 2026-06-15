@@ -1,0 +1,12 @@
+{
+  "/Users/alexanderamundsen/Documents/notch_pal/NotchPal/NotchPal/NotchPalApp.swift" : {
+    "abi-baseline-json" : "/Users/alexanderamundsen/Documents/notch_pal/NotchPal/build/DerivedData/Build/Intermediates.noindex/NotchPal.build/Release/NotchPal.build/Objects-normal/arm64/NotchPal.abi.json",
+    "const-values" : "/Users/alexanderamundsen/Documents/notch_pal/NotchPal/build/DerivedData/Build/Intermediates.noindex/NotchPal.build/Release/NotchPal.build/Objects-normal/arm64/NotchPal-primary.swiftconstvalues",
+    "dependencies" : "/Users/alexanderamundsen/Documents/notch_pal/NotchPal/build/DerivedData/Build/Intermediates.noindex/NotchPal.build/Release/NotchPal.build/Objects-normal/arm64/NotchPal-primary.d",
+    "diagnostics" : "/Users/alexanderamundsen/Documents/notch_pal/NotchPal/build/DerivedData/Build/Intermediates.noindex/NotchPal.build/Release/NotchPal.build/Objects-normal/arm64/NotchPal-primary.dia",
+    "objc-header" : "/Users/alexanderamundsen/Documents/notch_pal/NotchPal/build/DerivedData/Build/Intermediates.noindex/NotchPal.build/Release/NotchPal.build/Objects-normal/arm64/NotchPal-Swift.h",
+    "swiftdoc" : "/Users/alexanderamundsen/Documents/notch_pal/NotchPal/build/DerivedData/Build/Intermediates.noindex/NotchPal.build/Release/NotchPal.build/Objects-normal/arm64/NotchPal.swiftdoc",
+    "swiftmodule" : "/Users/alexanderamundsen/Documents/notch_pal/NotchPal/build/DerivedData/Build/Intermediates.noindex/NotchPal.build/Release/NotchPal.build/Objects-normal/arm64/NotchPal.swiftmodule",
+    "swiftsourceinfo" : "/Users/alexanderamundsen/Documents/notch_pal/NotchPal/build/DerivedData/Build/Intermediates.noindex/NotchPal.build/Release/NotchPal.build/Objects-normal/arm64/NotchPal.swiftsourceinfo"
+  }
+}

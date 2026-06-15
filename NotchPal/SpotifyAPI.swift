@@ -1,25 +1,30 @@
 import Foundation
 import AppKit
+import Combine
 
 class SpotifyAPI: ObservableObject {
     static let shared = SpotifyAPI()
 
     private let baseURL = "https://api.spotify.com/v1"
     private var pollTimer: Timer?
-    private var useAppleScript = false // Fallback to AppleScript if API fails
+    private var cancellables = Set<AnyCancellable>()
 
-    @Published var currentTrack: SpotifyTrack? {
-        didSet {
-            if let track = currentTrack, oldValue?.id != track.id {
-                print("🎵 Now playing: \(track.name) by \(track.artist)")
-            }
-        }
-    }
+    // Published state
+    @Published var currentTrack: SpotifyTrack?
+    @Published var lastPlayedTrack: SpotifyTrack?
     @Published var isPlaying = false
-    @Published var progress: Double = 0
     @Published var artwork: NSImage?
+    @Published var connectionState: ConnectionState = .checking
 
-    struct SpotifyTrack {
+    enum ConnectionState: Equatable {
+        case checking
+        case notConnected
+        case connected
+        case noActiveDevice
+        case error(String)
+    }
+
+    struct SpotifyTrack: Codable {
         let id: String
         let name: String
         let artist: String
@@ -27,250 +32,16 @@ class SpotifyAPI: ObservableObject {
         let artworkURL: String?
         let durationMs: Int
         var progressMs: Int
-    }
 
-    private init() {
-        print("🎵 SpotifyAPI initialized")
-    }
-
-    // MARK: - AppleScript Fallback (works without Premium!)
-
-    private func fetchViaAppleScript() {
-        // Don't use System Events - it's blocked in sandbox
-        // Just try to talk to Spotify directly
-        let script = """
-        try
-            tell application "Spotify"
-                if player state is stopped then
-                    return "STOPPED"
-                end if
-
-                set trackId to id of current track
-                set trackName to name of current track
-                set trackArtist to artist of current track
-                set trackAlbum to album of current track
-                set trackDuration to duration of current track
-                set trackPosition to player position
-                set trackArtwork to artwork url of current track
-                set isPlaying to (player state is playing)
-
-                return trackId & "|||" & trackName & "|||" & trackArtist & "|||" & trackAlbum & "|||" & (trackDuration as string) & "|||" & (trackPosition as string) & "|||" & trackArtwork & "|||" & (isPlaying as string)
-            end tell
-        on error
-            return "NOT_RUNNING"
-        end try
-        """
-
-        DispatchQueue.global(qos: .userInteractive).async { [weak self] in
-            guard let appleScript = NSAppleScript(source: script) else { return }
-
-            var error: NSDictionary?
-            let result = appleScript.executeAndReturnError(&error)
-
-            if let error = error {
-                print("❌ AppleScript error: \(error)")
-                return
-            }
-
-            guard let output = result.stringValue else { return }
-
-            if output == "NOT_RUNNING" {
-                print("📭 Spotify not running")
-                DispatchQueue.main.async {
-                    self?.currentTrack = nil
-                    self?.isPlaying = false
-                }
-                return
-            }
-
-            if output == "STOPPED" {
-                print("⏹️ Spotify stopped")
-                DispatchQueue.main.async {
-                    self?.currentTrack = nil
-                    self?.isPlaying = false
-                }
-                return
-            }
-
-            let parts = output.components(separatedBy: "|||")
-            guard parts.count >= 8 else {
-                print("❌ Invalid AppleScript response: \(output)")
-                return
-            }
-
-            let trackId = parts[0]
-            let trackName = parts[1]
-            let trackArtist = parts[2]
-            let trackAlbum = parts[3]
-
-            // Duration comes in ms from Spotify
-            let durationMs = Int(Double(parts[4].replacingOccurrences(of: ",", with: ".")) ?? 0)
-
-            // Position comes in seconds, convert to ms
-            let positionStr = parts[5].replacingOccurrences(of: ",", with: ".")
-            let positionSec = Double(positionStr) ?? 0
-            let positionMs = Int(positionSec * 1000)
-
-            let artworkURL = parts[6]
-            let playing = parts[7] == "true"
-
-            print("🎵 Position: \(positionStr)s -> \(positionMs)ms, Duration: \(durationMs)ms")
-
-            // Only log track changes, not every poll
-
-            let track = SpotifyTrack(
-                id: trackId,
-                name: trackName,
-                artist: trackArtist,
-                album: trackAlbum,
-                artworkURL: artworkURL.isEmpty ? nil : artworkURL,
-                durationMs: durationMs,
-                progressMs: positionMs
-            )
-
-            DispatchQueue.main.async { [weak self] in
-                guard let self = self else { return }
-                let trackChanged = self.currentTrack?.id != track.id
-
-                self.currentTrack = track
-                self.isPlaying = playing
-                self.progress = durationMs > 0 ? Double(positionMs) / Double(durationMs) : 0
-
-                if trackChanged, let url = track.artworkURL {
-                    self.fetchArtwork(from: url)
-                }
-            }
-        }
-    }
-
-    private func controlViaAppleScript(_ command: String) {
-        let script = """
-        tell application "Spotify"
-            \(command)
-        end tell
-        """
-
-        DispatchQueue.global(qos: .userInteractive).async { [weak self] in
-            guard let appleScript = NSAppleScript(source: script) else { return }
-            var error: NSDictionary?
-            appleScript.executeAndReturnError(&error)
-
-            if let error = error {
-                print("❌ AppleScript control error: \(error)")
-            } else {
-                print("✅ AppleScript command executed: \(command)")
-            }
-
-            // Refresh after command
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                self?.fetchViaAppleScript()
-            }
-        }
-    }
-
-    func startPolling() {
-        print("▶️ Starting Spotify polling (using AppleScript for local control)...")
-
-        pollTimer?.invalidate()
-
-        // Use AppleScript - works without Premium and for local Spotify
-        useAppleScript = true
-
-        DispatchQueue.main.async { [weak self] in
-            // Fetch immediately
-            self?.fetchViaAppleScript()
-
-            // Poll every 1 second for smooth progress updates
-            self?.pollTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-                self?.fetchViaAppleScript()
-            }
-            if let timer = self?.pollTimer {
-                RunLoop.main.add(timer, forMode: .common)
-            }
-        }
-    }
-
-    func stopPolling() {
-        print("⏹️ Stopping polling")
-        pollTimer?.invalidate()
-        pollTimer = nil
-    }
-
-    func fetchCurrentlyPlaying() {
-        print("🔍 Fetching currently playing...")
-
-        guard let token = SpotifyAuth.shared.accessToken else {
-            print("⚠️ No access token for API call")
-            return
-        }
-        print("🔑 Using token: \(token.prefix(20))...")
-
-        guard let url = URL(string: "\(baseURL)/me/player/currently-playing") else {
-            print("❌ Invalid URL")
-            return
-        }
-
-        var request = URLRequest(url: url)
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
-            if let error = error {
-                print("❌ Network error: \(error.localizedDescription)")
-                return
-            }
-
-            guard let httpResponse = response as? HTTPURLResponse else {
-                print("❌ No HTTP response")
-                return
-            }
-
-            print("📡 Currently playing response: \(httpResponse.statusCode)")
-
-            switch httpResponse.statusCode {
-            case 200:
-                if let data = data {
-                    if let json = String(data: data, encoding: .utf8) {
-                        print("📦 Got track data: \(json.prefix(150))...")
-                    }
-                    self?.parseTrackData(data)
-                }
-            case 204:
-                print("📭 No active playback (204)")
-                DispatchQueue.main.async {
-                    self?.currentTrack = nil
-                    self?.isPlaying = false
-                    self?.progress = 0
-                }
-            case 401:
-                print("⚠️ Token expired (401), refreshing...")
-                SpotifyAuth.shared.refreshAccessToken()
-            default:
-                if let data = data, let body = String(data: data, encoding: .utf8) {
-                    print("⚠️ API error \(httpResponse.statusCode): \(body)")
-                } else {
-                    print("⚠️ API error \(httpResponse.statusCode)")
-                }
-            }
-        }.resume()
-    }
-
-    private func parseTrackData(_ data: Data) {
-        do {
-            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
-
-            let playing = json["is_playing"] as? Bool ?? false
-            let progressMs = json["progress_ms"] as? Int ?? 0
-
-            guard let item = json["item"] as? [String: Any],
-                  let id = item["id"] as? String,
-                  let name = item["name"] as? String,
-                  let durationMs = item["duration_ms"] as? Int,
-                  let album = item["album"] as? [String: Any],
+        static func from(json: [String: Any], progressMs: Int) -> SpotifyTrack? {
+            guard let id = json["id"] as? String,
+                  let name = json["name"] as? String,
+                  let durationMs = json["duration_ms"] as? Int,
+                  let album = json["album"] as? [String: Any],
                   let albumName = album["name"] as? String,
-                  let artists = item["artists"] as? [[String: Any]],
+                  let artists = json["artists"] as? [[String: Any]],
                   let artistName = artists.first?["name"] as? String else {
-                return
+                return nil
             }
 
             var artworkURL: String?
@@ -280,7 +51,7 @@ class SpotifyAPI: ObservableObject {
                 artworkURL = url
             }
 
-            let track = SpotifyTrack(
+            return SpotifyTrack(
                 id: id,
                 name: name,
                 artist: artistName,
@@ -289,24 +60,273 @@ class SpotifyAPI: ObservableObject {
                 durationMs: durationMs,
                 progressMs: progressMs
             )
+        }
+    }
 
-            DispatchQueue.main.async { [weak self] in
-                guard let self = self else { return }
+    private var authCheckTimer: Timer?
 
-                let trackChanged = self.currentTrack?.id != track.id
+    private init() {
+        loadLastPlayedTrack()
+        setupAuthObserver()
+        checkInitialState()
+        startAuthCheck()
+    }
 
-                self.currentTrack = track
-                self.isPlaying = playing
-                self.progress = durationMs > 0 ? Double(progressMs) / Double(durationMs) : 0
+    private func setupAuthObserver() {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(authStatusChanged),
+            name: NSNotification.Name("SpotifyAuthChanged"),
+            object: nil
+        )
+    }
 
-                if trackChanged, let artworkURL = artworkURL {
-                    self.fetchArtwork(from: artworkURL)
+    private func startAuthCheck() {
+        // Check auth status every 5 seconds
+        authCheckTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
+            self?.checkAuthStatus()
+        }
+        if let timer = authCheckTimer {
+            RunLoop.main.add(timer, forMode: .common)
+        }
+    }
+
+    private func checkAuthStatus() {
+        let wasConnected = connectionState != .notConnected
+        let isNowAuthenticated = SpotifyAuth.shared.isAuthenticated
+
+        if !wasConnected && isNowAuthenticated {
+            print("🔄 Auth check: User is now authenticated")
+            connectionState = .checking
+            fetchRecentlyPlayedInitial()
+            startPolling()
+        } else if wasConnected && !isNowAuthenticated {
+            print("🔄 Auth check: User logged out")
+            connectionState = .notConnected
+            stopPolling()
+        }
+    }
+
+    private func checkInitialState() {
+        if SpotifyAuth.shared.isAuthenticated {
+            connectionState = .checking
+            fetchRecentlyPlayedInitial()
+            startPolling()
+        } else {
+            connectionState = .notConnected
+        }
+    }
+
+    private func fetchRecentlyPlayedInitial() {
+        SpotifyAuth.shared.ensureValidToken { [weak self] token in
+            guard let token = token else { return }
+            self?.fetchRecentlyPlayed(token: token)
+        }
+    }
+
+    @objc private func authStatusChanged() {
+        DispatchQueue.main.async { [weak self] in
+            if SpotifyAuth.shared.isAuthenticated {
+                self?.connectionState = .checking
+                self?.startPolling()
+            } else {
+                self?.connectionState = .notConnected
+                self?.stopPolling()
+            }
+        }
+    }
+
+    // MARK: - Persistence
+
+    private func loadLastPlayedTrack() {
+        if let data = UserDefaults.standard.data(forKey: "spotify_last_track"),
+           let track = try? JSONDecoder().decode(SpotifyTrack.self, from: data) {
+            lastPlayedTrack = track
+            loadCachedArtwork()
+        }
+    }
+
+    private func saveLastPlayedTrack(_ track: SpotifyTrack) {
+        lastPlayedTrack = track
+        if let data = try? JSONEncoder().encode(track) {
+            UserDefaults.standard.set(data, forKey: "spotify_last_track")
+        }
+    }
+
+    private func loadCachedArtwork() {
+        if let data = UserDefaults.standard.data(forKey: "spotify_last_artwork"),
+           let image = NSImage(data: data) {
+            artwork = image
+        }
+    }
+
+    private func cacheArtwork(_ image: NSImage) {
+        if let tiffData = image.tiffRepresentation,
+           let bitmap = NSBitmapImageRep(data: tiffData),
+           let jpegData = bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.7]) {
+            UserDefaults.standard.set(jpegData, forKey: "spotify_last_artwork")
+        }
+    }
+
+    // MARK: - Polling
+
+    func startPolling() {
+        pollTimer?.invalidate()
+
+        guard SpotifyAuth.shared.isAuthenticated else {
+            connectionState = .notConnected
+            return
+        }
+
+        print("🔄 [SpotifyAPI] Starter polling")
+        fetchCurrentlyPlaying()
+
+        pollTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
+            print("🔄 [SpotifyAPI] Poller Spotify for status")
+            self?.fetchCurrentlyPlaying()
+        }
+        if let timer = pollTimer {
+            RunLoop.main.add(timer, forMode: .common)
+        }
+    }
+
+    func stopPolling() {
+        print("🛑 [SpotifyAPI] Stopper polling")
+        pollTimer?.invalidate()
+        pollTimer = nil
+    }
+
+    // MARK: - Fetch Currently Playing
+
+    private func fetchCurrentlyPlaying() {
+        print("🎧 [SpotifyAPI] Henter nåværende sang fra Spotify")
+        SpotifyAuth.shared.ensureValidToken { [weak self] token in
+            guard let token = token else {
+                DispatchQueue.main.async {
+                    self?.connectionState = .notConnected
                 }
+                return
+            }
+            self?.fetchWithToken(token)
+        }
+    }
+
+    private func fetchWithToken(_ token: String) {
+        guard let url = URL(string: "\(baseURL)/me/player/currently-playing") else { return }
+
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            DispatchQueue.main.async {
+                if let error = error {
+                    self?.connectionState = .error(error.localizedDescription)
+                    return
+                }
+
+                guard let httpResponse = response as? HTTPURLResponse else { return }
+
+                switch httpResponse.statusCode {
+                case 200:
+                    self?.connectionState = .connected
+                    if let data = data {
+                        self?.parseTrackData(data)
+                    }
+                case 204:
+                    // No active playback - fetch recently played
+                    self?.currentTrack = nil
+                    self?.isPlaying = false
+                    self?.fetchRecentlyPlayed(token: token)
+                case 401:
+                    SpotifyAuth.shared.refreshAccessToken()
+                case 403:
+                    self?.connectionState = .error("Ingen tilgang")
+                case 429:
+                    // Rate limited - slow down polling
+                    self?.stopPolling()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 30) {
+                        self?.startPolling()
+                    }
+                default:
+                    if httpResponse.statusCode >= 500 {
+                        // Server error - don't show to user
+                    } else {
+                        self?.connectionState = .error("Feil: \(httpResponse.statusCode)")
+                    }
+                }
+            }
+        }.resume()
+    }
+
+    private func parseTrackData(_ data: Data) {
+        do {
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let item = json["item"] as? [String: Any] else {
+                return
+            }
+
+            let playing = json["is_playing"] as? Bool ?? false
+            let progressMs = json["progress_ms"] as? Int ?? 0
+
+            guard let track = SpotifyTrack.from(json: item, progressMs: progressMs) else {
+                return
+            }
+
+            let trackChanged = currentTrack?.id != track.id
+
+            currentTrack = track
+            isPlaying = playing
+
+            // Save as last played
+            saveLastPlayedTrack(track)
+
+            if trackChanged, let artworkURL = track.artworkURL {
+                fetchArtwork(from: artworkURL)
             }
 
         } catch {
             print("❌ Parse error: \(error)")
         }
+    }
+
+    private func fetchRecentlyPlayed(token: String) {
+        guard let url = URL(string: "\(baseURL)/me/player/recently-played?limit=1") else { return }
+
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            guard let data = data,
+                  let httpResponse = response as? HTTPURLResponse,
+                  httpResponse.statusCode == 200 else {
+                DispatchQueue.main.async {
+                    self?.connectionState = .noActiveDevice
+                }
+                return
+            }
+
+            do {
+                if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let items = json["items"] as? [[String: Any]],
+                   let firstItem = items.first,
+                   let trackData = firstItem["track"] as? [String: Any],
+                   let track = SpotifyTrack.from(json: trackData, progressMs: 0) {
+
+                    DispatchQueue.main.async {
+                        self?.lastPlayedTrack = track
+                        self?.connectionState = .noActiveDevice
+                        self?.saveLastPlayedTrack(track)
+
+                        // Fetch artwork if needed
+                        if let artworkURL = track.artworkURL, self?.artwork == nil {
+                            self?.fetchArtwork(from: artworkURL)
+                        }
+                    }
+                }
+            } catch {
+                print("❌ Recently played parse error: \(error)")
+            }
+        }.resume()
     }
 
     private func fetchArtwork(from urlString: String) {
@@ -316,88 +336,318 @@ class SpotifyAPI: ObservableObject {
             if let data = data, let image = NSImage(data: data) {
                 DispatchQueue.main.async {
                     self?.artwork = image
+                    self?.cacheArtwork(image)
                 }
             }
         }.resume()
+    }
+
+    // MARK: - Display Track (current or last played)
+
+    var displayTrack: SpotifyTrack? {
+        currentTrack ?? lastPlayedTrack
+    }
+
+    var statusText: String {
+        switch connectionState {
+        case .checking:
+            return "Kobler til..."
+        case .notConnected:
+            return "Ikke koblet til"
+        case .connected:
+            return isPlaying ? "Spiller nå" : "Pauset"
+        case .noActiveDevice:
+            return "Sist spilt"
+        case .error(let msg):
+            return msg
+        }
     }
 
     // MARK: - Playback Controls
 
     func togglePlayPause() {
-        print("⏯️ Toggle play/pause")
-        if useAppleScript {
-            controlViaAppleScript("playpause")
-        } else {
-            if isPlaying { pause() } else { play() }
-        }
+        if isPlaying { pause() } else { play() }
     }
 
     func play() {
-        print("▶️ Play")
-        if useAppleScript {
-            controlViaAppleScript("play")
-        } else {
-            sendCommand("/me/player/play", method: "PUT")
+        SpotifyAuth.shared.ensureValidToken { [weak self] token in
+            guard let self = self, let token = token else { return }
+            self.smartPlay(token: token)
         }
     }
 
-    func pause() {
-        print("⏸️ Pause")
-        if useAppleScript {
-            controlViaAppleScript("pause")
-        } else {
-            sendCommand("/me/player/pause", method: "PUT")
+    private func smartPlay(token: String) {
+        // First, check if we have an active device
+        getActiveDevice(token: token) { [weak self] deviceId in
+            guard let self = self else { return }
+
+            if let deviceId = deviceId {
+                // We have a device, try to play
+                self.tryPlay(deviceId: deviceId, token: token)
+            } else {
+                // No active device, find one and transfer
+                self.findAndTransferToDevice(token: token) { success in
+                    if success {
+                        self.getActiveDevice(token: token) { newDeviceId in
+                            if let newDeviceId = newDeviceId {
+                                self.tryPlay(deviceId: newDeviceId, token: token)
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
-    func nextTrack() {
-        print("⏭️ Next")
-        if useAppleScript {
-            controlViaAppleScript("next track")
-        } else {
-            sendCommand("/me/player/next", method: "POST")
-        }
-    }
-
-    func previousTrack() {
-        print("⏮️ Previous")
-        if useAppleScript {
-            controlViaAppleScript("previous track")
-        } else {
-            sendCommand("/me/player/previous", method: "POST")
-        }
-    }
-
-    private func sendCommand(_ endpoint: String, method: String) {
-        guard let token = SpotifyAuth.shared.accessToken,
-              let url = URL(string: "\(baseURL)\(endpoint)") else {
-            print("⚠️ Cannot send command - no token")
+    private func getActiveDevice(token: String, completion: @escaping (String?) -> Void) {
+        guard let url = URL(string: "\(baseURL)/me/player/devices") else {
+            completion(nil)
             return
         }
 
         var request = URLRequest(url: url)
-        request.httpMethod = method
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
-            if let http = response as? HTTPURLResponse {
-                print("🎮 Command response: \(http.statusCode)")
+        URLSession.shared.dataTask(with: request) { data, _, _ in
+            guard let data = data,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let devices = json["devices"] as? [[String: Any]] else {
+                DispatchQueue.main.async { completion(nil) }
+                return
+            }
 
-                if http.statusCode == 200 || http.statusCode == 204 {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            // Find active device or first available
+            let activeDevice = devices.first { $0["is_active"] as? Bool == true }
+            let deviceId = (activeDevice ?? devices.first)?["id"] as? String
+
+            DispatchQueue.main.async { completion(deviceId) }
+        }.resume()
+    }
+
+    private func tryPlay(deviceId: String, token: String) {
+        guard let url = URL(string: "\(baseURL)/me/player/play?device_id=\(deviceId)") else { return }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "PUT"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, _ in
+            guard let http = response as? HTTPURLResponse else { return }
+
+            DispatchQueue.main.async {
+                if http.statusCode == 204 || http.statusCode == 200 {
+                    self?.connectionState = .connected
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                         self?.fetchCurrentlyPlaying()
                     }
                 } else if http.statusCode == 403 {
-                    if let data = data, let body = String(data: data, encoding: .utf8) {
-                        print("🚫 403 Forbidden: \(body)")
-                    }
-                    print("💡 Tips: Åpne Spotify og start avspilling på en enhet først!")
+                    self?.playFromLibrary(deviceId: deviceId, token: token)
                 } else if http.statusCode == 404 {
-                    print("🚫 404: Ingen aktiv Spotify-enhet funnet")
-                    print("💡 Tips: Åpne Spotify-appen og spill noe!")
+                    self?.connectionState = .noActiveDevice
                 }
             }
         }.resume()
     }
+
+    private func playFromLibrary(deviceId: String, token: String) {
+        if let lastTrack = lastPlayedTrack {
+            let uri = "spotify:track:\(lastTrack.id)"
+            playUri(uri, deviceId: deviceId, token: token)
+            return
+        }
+
+        fetchTrackUri(from: "/me/player/recently-played?limit=1", key: "items", trackPath: ["track", "uri"], token: token) { [weak self] uri in
+            if let uri = uri {
+                self?.playUri(uri, deviceId: deviceId, token: token)
+            } else {
+                self?.fetchTrackUri(from: "/me/tracks?limit=1", key: "items", trackPath: ["track", "uri"], token: token) { uri in
+                    if let uri = uri {
+                        self?.playUri(uri, deviceId: deviceId, token: token)
+                    } else {
+                        self?.fetchTrackUri(from: "/me/top/tracks?limit=1", key: "items", trackPath: ["uri"], token: token) { uri in
+                            if let uri = uri {
+                                self?.playUri(uri, deviceId: deviceId, token: token)
+                            } else {
+                                DispatchQueue.main.async {
+                                    self?.connectionState = .error("Åpne Spotify først")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func fetchTrackUri(from endpoint: String, key: String, trackPath: [String], token: String, completion: @escaping (String?) -> Void) {
+        guard let url = URL(string: "\(baseURL)\(endpoint)") else {
+            completion(nil)
+            return
+        }
+
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        URLSession.shared.dataTask(with: request) { data, response, _ in
+            guard let data = data,
+                  let http = response as? HTTPURLResponse,
+                  http.statusCode == 200,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let items = json[key] as? [[String: Any]],
+                  let firstItem = items.first else {
+                completion(nil)
+                return
+            }
+
+            var current: Any = firstItem
+            for pathKey in trackPath {
+                if let dict = current as? [String: Any], let next = dict[pathKey] {
+                    current = next
+                } else {
+                    completion(nil)
+                    return
+                }
+            }
+
+            if let uri = current as? String {
+                completion(uri)
+            } else {
+                completion(nil)
+            }
+        }.resume()
+    }
+
+    private func playUri(_ uri: String, deviceId: String, token: String) {
+        guard let url = URL(string: "\(baseURL)/me/player/play?device_id=\(deviceId)") else { return }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "PUT"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let body: [String: Any] = ["uris": [uri]]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+
+        URLSession.shared.dataTask(with: request) { [weak self] _, response, _ in
+            guard let http = response as? HTTPURLResponse else { return }
+
+            DispatchQueue.main.async {
+                if http.statusCode == 204 || http.statusCode == 200 {
+                    self?.connectionState = .connected
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        self?.fetchCurrentlyPlaying()
+                    }
+                } else if http.statusCode == 403 {
+                    self?.connectionState = .error("Krever Premium")
+                }
+            }
+        }.resume()
+    }
+
+    private func findAndTransferToDevice(token: String, completion: @escaping (Bool) -> Void) {
+        guard let url = URL(string: "\(baseURL)/me/player/devices") else {
+            completion(false)
+            return
+        }
+
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        URLSession.shared.dataTask(with: request) { [weak self] data, _, _ in
+            guard let self = self, let data = data,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let devices = json["devices"] as? [[String: Any]],
+                  let firstDevice = devices.first,
+                  let deviceId = firstDevice["id"] as? String else {
+                DispatchQueue.main.async {
+                    self?.connectionState = .error("Ingen enheter funnet")
+                    completion(false)
+                }
+                return
+            }
+
+            self.transferPlayback(to: deviceId, token: token, completion: completion)
+        }.resume()
+    }
+
+    private func transferPlayback(to deviceId: String, token: String, completion: @escaping (Bool) -> Void) {
+        guard let url = URL(string: "\(baseURL)/me/player") else {
+            completion(false)
+            return
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "PUT"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let body: [String: Any] = ["device_ids": [deviceId]]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+
+        URLSession.shared.dataTask(with: request) { [weak self] _, response, _ in
+            if let http = response as? HTTPURLResponse {
+                DispatchQueue.main.async {
+                    let success = http.statusCode == 204 || http.statusCode == 200
+                    if success {
+                        self?.connectionState = .connected
+                    }
+                    completion(success)
+                }
+            } else {
+                DispatchQueue.main.async { completion(false) }
+            }
+        }.resume()
+    }
+
+    func pause() {
+        sendCommand("/me/player/pause", method: "PUT")
+    }
+
+    func nextTrack() {
+        sendCommand("/me/player/next", method: "POST")
+    }
+
+    func previousTrack() {
+        sendCommand("/me/player/previous", method: "POST")
+    }
+
+    private func sendCommand(_ endpoint: String, method: String) {
+        SpotifyAuth.shared.ensureValidToken { [weak self] token in
+            guard let self = self,
+                  let token = token,
+                  let url = URL(string: "\(self.baseURL)\(endpoint)") else {
+                return
+            }
+
+            var request = URLRequest(url: url)
+            request.httpMethod = method
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+            URLSession.shared.dataTask(with: request) { [weak self] _, response, _ in
+                if let http = response as? HTTPURLResponse {
+                    DispatchQueue.main.async {
+                        switch http.statusCode {
+                        case 200, 204:
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                self?.fetchCurrentlyPlaying()
+                            }
+                        case 403:
+                            self?.connectionState = .error("Krever Premium")
+                        case 404:
+                            if endpoint.contains("play") {
+                                self?.play()
+                            } else {
+                                self?.connectionState = .noActiveDevice
+                            }
+                        case 429:
+                            break
+                        default:
+                            break
+                        }
+                    }
+                }
+            }.resume()
+        }
+    }
 }
+

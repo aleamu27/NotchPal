@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>logFormatVersion</key>
+	<integer>11</integer>
+	<key>logs</key>
+	<dict>
+		<key>CA8620F7-B04C-473F-B9C7-C33FC86BF98B</key>
+		<dict>
+			<key>className</key>
+			<string>IDECommandLineBuildLog</string>
+			<key>documentTypeString</key>
+			<string>&lt;nil&gt;</string>
+			<key>domainType</key>
+			<string>Xcode.IDEActivityLogDomainType.BuildLog</string>
+			<key>fileName</key>
+			<string>CA8620F7-B04C-473F-B9C7-C33FC86BF98B.xcactivitylog</string>
+			<key>hasPrimaryLog</key>
+			<true/>
+			<key>primaryObservable</key>
+			<dict>
+				<key>highLevelStatus</key>
+				<string>W</string>
+				<key>totalNumberOfAnalyzerIssues</key>
+				<integer>0</integer>
+				<key>totalNumberOfErrors</key>
+				<integer>0</integer>
+				<key>totalNumberOfTestFailures</key>
+				<integer>0</integer>
+				<key>totalNumberOfWarnings</key>
+				<integer>1</integer>
+			</dict>
+			<key>schemeIdentifier-containerName</key>
+			<string>NotchPal project</string>
+			<key>schemeIdentifier-schemeName</key>
+			<string>NotchPal</string>
+			<key>schemeIdentifier-sharedScheme</key>
+			<integer>1</integer>
+			<key>signature</key>
+			<string>Building project NotchPal with scheme NotchPal and configuration Release</string>
+			<key>timeStartedRecording</key>
+			<real>795830313.69497502</real>
+			<key>timeStoppedRecording</key>
+			<real>795830326.64394104</real>
+			<key>title</key>
+			<string>Building project NotchPal with scheme NotchPal and configuration Release</string>
+			<key>uniqueIdentifier</key>
+			<string>CA8620F7-B04C-473F-B9C7-C33FC86BF98B</string>
+		</dict>
+		<key>E064A285-9DCE-4844-8A5B-93992BC24F7E</key>
+		<dict>
+			<key>className</key>
+			<string>IDECommandLineBuildLog</string>
+			<key>documentTypeString</key>
+			<string>&lt;nil&gt;</string>
+			<key>domainType</key>
+			<string>Xcode.IDEActivityLogDomainType.BuildLog</string>
+			<key>fileName</key>
+			<string>E064A285-9DCE-4844-8A5B-93992BC24F7E.xcactivitylog</string>
+			<key>hasPrimaryLog</key>
+			<true/>
+			<key>primaryObservable</key>
+			<dict>
+				<key>highLevelStatus</key>
+				<string>W</string>
+				<key>totalNumberOfAnalyzerIssues</key>
+				<integer>0</integer>
+				<key>totalNumberOfErrors</key>
+				<integer>0</integer>
+				<key>totalNumberOfTestFailures</key>
+				<integer>0</integer>
+				<key>totalNumberOfWarnings</key>
+				<integer>1</integer>
+			</dict>
+			<key>schemeIdentifier-containerName</key>
+			<string>NotchPal project</string>
+			<key>schemeIdentifier-schemeName</key>
+			<string>NotchPal</string>
+			<key>schemeIdentifier-sharedScheme</key>
+			<integer>1</integer>
+			<key>signature</key>
+			<string>Building project NotchPal with scheme NotchPal and configuration Release</string>
+			<key>timeStartedRecording</key>
+			<real>795829308.16861296</real>
+			<key>timeStoppedRecording</key>
+			<real>795829321.32039201</real>
+			<key>title</key>
+			<string>Building project NotchPal with scheme NotchPal and configuration Release</string>
+			<key>uniqueIdentifier</key>
+			<string>E064A285-9DCE-4844-8A5B-93992BC24F7E</string>
+		</dict>
+	</dict>
+</dict>
+</plist>

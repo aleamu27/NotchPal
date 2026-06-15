@@ -7,7 +7,7 @@ class SpotifyAuth: ObservableObject {
 
     private let clientId = "b0b70c89976c44309713ad547fb7b3a3"
     private let redirectUri = "http://127.0.0.1:8888/callback"
-    private let scopes = "user-read-playback-state user-modify-playback-state user-read-currently-playing"
+    private let scopes = "streaming user-read-email user-read-private user-read-playback-state user-modify-playback-state user-read-currently-playing user-read-recently-played user-library-read playlist-read-private user-top-read"
 
     @Published var isAuthenticated = false {
         didSet { print("🔐 isAuthenticated changed: \(isAuthenticated)") }
@@ -20,6 +20,8 @@ class SpotifyAuth: ObservableObject {
     private var codeVerifier: String?
     private var tokenExpirationDate: Date?
     private var localServer: LocalAuthServer?
+    private var isRefreshing = false
+    private var pendingTokenCallbacks: [(String?) -> Void] = []
 
     private let tokenKey = "spotify_access_token"
     private let refreshTokenKey = "spotify_refresh_token"
@@ -45,7 +47,11 @@ class SpotifyAuth: ObservableObject {
                 print("   Token expires: \(expiration)")
                 if Date() > expiration {
                     print("   Token expired, refreshing...")
-                    refreshAccessToken()
+                    // Set authenticated while we refresh - will be set to false if refresh fails
+                    if refreshToken != nil {
+                        isAuthenticated = true
+                        refreshAccessToken()
+                    }
                 } else {
                     isAuthenticated = true
                     print("   ✅ Token valid, authenticated!")
@@ -212,10 +218,15 @@ class SpotifyAuth: ObservableObject {
                 self.accessToken = token
                 self.isAuthenticated = true
                 print("✅ Authentication complete!")
+                NotificationCenter.default.post(name: NSNotification.Name("SpotifyAuthChanged"), object: nil)
+                self.notifyPendingCallbacks(token: token)
             }
 
         } catch {
             print("❌ JSON parsing error: \(error)")
+            DispatchQueue.main.async { [weak self] in
+                self?.notifyPendingCallbacks(token: nil)
+            }
         }
     }
 
@@ -225,6 +236,7 @@ class SpotifyAuth: ObservableObject {
             print("❌ No refresh token, need to re-auth")
             DispatchQueue.main.async {
                 self.isAuthenticated = false
+                self.notifyPendingCallbacks(token: nil)
             }
             return
         }
@@ -239,12 +251,47 @@ class SpotifyAuth: ObservableObject {
         let body = "grant_type=refresh_token&refresh_token=\(refreshToken)&client_id=\(clientId)"
         request.httpBody = body.data(using: .utf8)
 
-        URLSession.shared.dataTask(with: request) { [weak self] data, _, error in
-            guard let data = data else {
-                print("❌ Refresh failed: \(error?.localizedDescription ?? "unknown")")
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            guard let self = self else { return }
+
+            if let error = error {
+                print("❌ Refresh failed: \(error.localizedDescription)")
+                DispatchQueue.main.async {
+                    self.notifyPendingCallbacks(token: nil)
+                }
                 return
             }
-            self?.handleTokenResponse(data: data)
+
+            guard let data = data else {
+                print("❌ Refresh failed: no data")
+                DispatchQueue.main.async {
+                    self.notifyPendingCallbacks(token: nil)
+                }
+                return
+            }
+
+            // Check for HTTP errors
+            if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode != 200 {
+                print("❌ Refresh failed with status: \(httpResponse.statusCode)")
+                if let responseStr = String(data: data, encoding: .utf8) {
+                    print("   Response: \(responseStr)")
+                }
+                DispatchQueue.main.async {
+                    // If refresh token is invalid, need to re-auth
+                    if httpResponse.statusCode == 400 || httpResponse.statusCode == 401 {
+                        self.isAuthenticated = false
+                        self.accessToken = nil
+                        self.refreshToken = nil
+                        UserDefaults.standard.removeObject(forKey: self.tokenKey)
+                        UserDefaults.standard.removeObject(forKey: self.refreshTokenKey)
+                        UserDefaults.standard.removeObject(forKey: self.expirationKey)
+                    }
+                    self.notifyPendingCallbacks(token: nil)
+                }
+                return
+            }
+
+            self.handleTokenResponse(data: data)
         }.resume()
     }
 
@@ -259,17 +306,40 @@ class SpotifyAuth: ObservableObject {
             self.accessToken = nil
             self.refreshToken = nil
             self.isAuthenticated = false
+            NotificationCenter.default.post(name: NSNotification.Name("SpotifyAuthChanged"), object: nil)
         }
     }
 
     func ensureValidToken(completion: @escaping (String?) -> Void) {
-        if let expiration = tokenExpirationDate, Date() > expiration {
-            refreshAccessToken()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                completion(self.accessToken)
-            }
-        } else {
-            completion(accessToken)
+        // Check if token is valid (with 60 second buffer)
+        if let expiration = tokenExpirationDate, Date() < expiration, let token = accessToken {
+            completion(token)
+            return
+        }
+
+        // Token expired or missing - need to refresh
+        guard refreshToken != nil else {
+            completion(nil)
+            return
+        }
+
+        // Queue the callback
+        pendingTokenCallbacks.append(completion)
+
+        // Only start one refresh at a time
+        guard !isRefreshing else { return }
+
+        isRefreshing = true
+        refreshAccessToken()
+    }
+
+    private func notifyPendingCallbacks(token: String?) {
+        let callbacks = pendingTokenCallbacks
+        pendingTokenCallbacks = []
+        isRefreshing = false
+
+        for callback in callbacks {
+            callback(token)
         }
     }
 
