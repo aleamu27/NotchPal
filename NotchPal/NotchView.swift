@@ -134,15 +134,29 @@ struct NotchView: View {
     }
 }
 
-// MARK: - Music Player Card (med smooth progress)
+// MARK: - Music Player Card (med ultra-smooth progress)
 struct MusicPlayerCard: View {
     @ObservedObject var spotify: SpotifyAPI
 
     private let spotifyGreen = Color(red: 0.12, green: 0.84, blue: 0.38)
 
-    @State private var localProgress: Int = 0
+    // Vi lagrer referansepunkter for å regne ut nøyaktig tid i sanntid
+    @State private var baseProgressMs: Int = 0
+    @State private var lastUpdateTimestamp: Date = Date()
     @State private var lastTrackID: String?
-    let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+    
+    // En rask timer som oppdaterer UI ofte nok til at progressbaren flyter i 60fps
+    let UIAnimationTimer = Timer.publish(every: 0.05, on: .main, in: .common).autoconnect()
+    
+    // Denne verdien henter vi dynamisk i UI-en
+    private var currentProgressMs: Int {
+        guard spotify.isPlaying else { return baseProgressMs }
+        let elapsedMs = Int(Date().timeIntervalSince(lastUpdateTimestamp) * 1000)
+        if let track = spotify.currentTrack {
+            return min(baseProgressMs + elapsedMs, track.durationMs)
+        }
+        return baseProgressMs
+    }
 
     var body: some View {
         Group {
@@ -156,30 +170,47 @@ struct MusicPlayerCard: View {
             }
         }
         .onAppear {
-            if let track = spotify.currentTrack {
-                localProgress = track.progressMs
-                lastTrackID = track.id
-            }
+            resetLocalProgress()
         }
+        // Hvis sangen endrer seg, nullstill referansepunktet
         .onChange(of: spotify.currentTrack?.id) { newID in
-            if let track = spotify.currentTrack, newID != lastTrackID {
-                localProgress = track.progressMs
-                lastTrackID = track.id
+            if newID != lastTrackID {
+                resetLocalProgress()
             }
         }
-        .onChange(of: spotify.currentTrack?.progressMs) { newMs in
-            if let ms = newMs {
-                localProgress = ms
-            }
+        // Hver gang API-et poller en ny verdi (hvert ~3. sek), synkroniserer vi basen smoothly
+        .onChange(of: spotify.currentTrack?.progressMs) { _ in
+            syncWithAPI()
         }
-        .onReceive(timer) { _ in
-            guard
-                let track = spotify.currentTrack,
-                spotify.isPlaying,
-                track.durationMs > 0,
-                localProgress < track.durationMs
-            else { return }
-            localProgress += 1000
+        // Når isPlaying endres (f.eks. pause), må vi fryse fremdriften
+        .onChange(of: spotify.isPlaying) { _ in
+            syncWithAPI()
+        }
+    }
+
+    private func resetLocalProgress() {
+        if let track = spotify.currentTrack {
+            baseProgressMs = track.progressMs
+            lastUpdateTimestamp = Date()
+            lastTrackID = track.id
+        }
+    }
+
+    private func syncWithAPI() {
+        if let track = spotify.currentTrack {
+            // For å unngå harde hopp hvis API-et rapporterer en verdi som avviker litt
+            // på grunn av nettverkstreghet, kan vi velge å stole på vår egen lineære fremdrift
+            // dersom avviket er minimalt (< 1.5 sek), eller snappe til API-et om avviket er stort.
+            let currentLocal = currentProgressMs
+            let apiValue = track.progressMs
+            
+            if abs(currentLocal - apiValue) > 1500 {
+                baseProgressMs = apiValue
+            } else {
+                // Hvis avviket er lite, beholder vi nåværende progresjon for å unngå "hakking" bakover/forover
+                baseProgressMs = currentLocal
+            }
+            lastUpdateTimestamp = Date()
         }
     }
 
@@ -288,28 +319,34 @@ struct MusicPlayerCard: View {
 
                 Spacer().frame(height: 4)
 
-                // Progress bar
-                GeometryReader { g in
-                    ZStack(alignment: .leading) {
-                        Capsule()
-                            .fill(Color.white.opacity(0.15))
-                            .frame(height: 3)
-                        Capsule()
-                            .fill(spotifyGreen)
-                            .frame(width: max(0, g.size.width * progressRatio), height: 3)
+                // Progress bar utpakket med en tids-trigger for flytende animasjon
+                TimelineView(.animation(minimumInterval: 0.05, paused: !spotify.isPlaying)) { _ in
+                    let currentProgress = currentProgressMs
+                    
+                    VStack(spacing: 2) {
+                        GeometryReader { g in
+                            ZStack(alignment: .leading) {
+                                Capsule()
+                                    .fill(Color.white.opacity(0.15))
+                                    .frame(height: 3)
+                                Capsule()
+                                    .fill(spotifyGreen)
+                                    .frame(width: max(0, g.size.width * progressRatio(for: currentProgress)), height: 3)
+                            }
+                        }
+                        .frame(height: 3)
+                        
+                        // Time labels
+                        HStack {
+                            Text(formatMs(currentProgress))
+                                .font(.system(size: 9, design: .rounded))
+                                .foregroundColor(.white.opacity(0.4))
+                            Spacer()
+                            Text(formatMs(spotify.displayTrack?.durationMs ?? 0))
+                                .font(.system(size: 9, design: .rounded))
+                                .foregroundColor(.white.opacity(0.4))
+                        }
                     }
-                }
-                .frame(height: 3)
-
-                // Time labels
-                HStack {
-                    Text(formatMs(localProgress))
-                        .font(.system(size: 9, design: .rounded))
-                        .foregroundColor(.white.opacity(0.4))
-                    Spacer()
-                    Text(formatMs(spotify.displayTrack?.durationMs ?? 0))
-                        .font(.system(size: 9, design: .rounded))
-                        .foregroundColor(.white.opacity(0.4))
                 }
 
                 // Playback controls
@@ -356,9 +393,9 @@ struct MusicPlayerCard: View {
         .padding(8)
     }
 
-    var progressRatio: Double {
+    func progressRatio(for progress: Int) -> Double {
         guard let track = spotify.currentTrack, track.durationMs > 0 else { return 0 }
-        return Double(localProgress) / Double(track.durationMs)
+        return Double(progress) / Double(track.durationMs)
     }
 
     func formatMs(_ ms: Int) -> String {
